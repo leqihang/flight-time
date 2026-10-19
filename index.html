@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>购票时机实验室 · 曲线迁移版</title>
+  <meta name="description" content="用 30 万条真实机票报价还原购票曲线，并把它迁移到中国航线上做购票时机推算。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">✈</div>
+      <div class="brand-text">
+        <h1>购票时机实验室</h1>
+        <p>用真实报价还原价格曲线，再搬到你的航线上</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span class="source-chip">数据源：Kaggle · 印度国内 · 30 万条</span>
+    </div>
+  </header>
+
+  <main class="page">
+
+    <section class="hero">
+      <h2>提前多久买，才不亏？</h2>
+      <p>
+        用 30 万条真实报价还原一条航线的价格曲线，再把这条曲线的<strong>形状</strong>搬到中国航线，
+        用你输入的常态价换算成人民币。哪里是实测、哪里是推算，全程标清楚。
+      </p>
+      <div class="hero-meta">
+        <span><b id="metaRows">300,153</b> 条报价</span>
+        <span><b id="metaSeries">60</b> 条航线×舱位</span>
+        <span><b>1–49</b> 天提前期</span>
+        <span class="muted" id="metaBuilt"></span>
+      </div>
+    </section>
+
+    <!-- ① 实测曲线 -->
+    <section class="panel">
+      <div class="panel-head">
+        <span class="step">1</span>
+        <h2>一条真实航线的价格曲线</h2>
+        <span class="badge badge-real">实测</span>
+        <span class="head-note">印度国内 · 真实比价记录</span>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label for="selFrom">出发城市</label>
+          <select id="selFrom"></select>
+        </div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="field">
+          <label for="selTo">到达城市</label>
+          <select id="selTo"></select>
+        </div>
+        <div class="field">
+          <label for="selCls">舱位</label>
+          <select id="selCls">
+            <option value="Economy">经济舱</option>
+            <option value="Business">商务舱</option>
+          </select>
+        </div>
+        <div class="field field-meta">
+          <label>样本</label>
+          <div class="meta-value" id="sampleCount">—</div>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdictA"></div>
+
+      <div class="chart-wrap">
+        <div class="chart-head">
+          <h3>价格 × 提前天数</h3>
+          <span class="chart-note">阴影为 25%–75% 分位 · 越靠右越接近起飞</span>
+        </div>
+        <svg id="chartA" viewBox="0 0 860 340" role="img" aria-label="真实航线的价格随提前天数变化"></svg>
+      </div>
+
+      <p class="note">
+        单位：印度卢比 ₹。曲线按该航线常态价归一化后再画，所以形状可以跨航线比较。
+      </p>
+    </section>
+
+    <!-- ② 迁移到中国 -->
+    <section class="panel panel-convert">
+      <div class="panel-head">
+        <span class="step">2</span>
+        <h2>把这条曲线搬到你的航线</h2>
+        <span class="badge badge-est">推算</span>
+        <span class="head-note">形状来自上图，价格由城市对标估算，可随时覆盖</span>
+      </div>
+
+      <div class="convert-grid">
+        <div class="convert-form">
+          <div class="field-row">
+            <div class="field">
+              <label for="cnFrom">出发城市</label>
+              <select id="cnFrom"></select>
+            </div>
+            <div class="field">
+              <label for="cnTo">到达城市</label>
+              <select id="cnTo"></select>
+            </div>
+          </div>
+
+          <div class="estimate-box" id="estimateBox"></div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="inBase">常态价（经济舱，提前 3 周以上）</label>
+              <div class="input-unit">
+                <span>¥</span>
+                <input type="number" id="inBase" min="100" step="10" value="1180">
+              </div>
+            </div>
+            <div class="field">
+              <label for="inDepart">出发日期（可选）</label>
+              <input type="date" id="inDepart">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="inAlpha">
+              临期涨价强度 α
+              <span class="hint">1.0 = 与印度经济舱曲线相同，越大表示中国临期涨得越凶</span>
+            </label>
+            <div class="slider-row">
+              <input type="range" id="inAlpha" min="0.5" max="2.5" step="0.05" value="1">
+              <output id="alphaVal">1.00</output>
+            </div>
+          </div>
+
+          <div class="fit-box" id="fitBox">
+            <div class="fit-head">
+              <strong>用你自己的数据校准 α</strong>
+              <button class="btn btn-sm btn-ghost" id="btnImport" type="button">导入 CSV</button>
+            </div>
+            <p id="fitNote">
+              还没有中国实测数据。先按 1.0 看推算结果，之后导入采集记录即可自动拟合。
+            </p>
+            <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+          </div>
+        </div>
+
+        <div class="convert-out">
+          <div class="verdict verdict-est" id="verdictB"></div>
+          <div class="chart-wrap">
+            <div class="chart-head">
+              <h3>推算曲线（元）</h3>
+              <span class="chart-note">49 天以外按平台价处理</span>
+            </div>
+            <svg id="chartB" viewBox="0 0 860 300" role="img" aria-label="中国航线的推算价格曲线"></svg>
+          </div>
+        </div>
+      </div>
+      <details class="city-details">
+        <summary>为什么这样对标？看看城市参数</summary>
+        <div class="city-table-wrap">
+          <table class="city-table" id="cityTable"></table>
+        </div>
+        <p class="note">
+          人口与人均 GDP 约 2023 年，机场吞吐量为 2019 年（疫情前）量级。
+          这些数字只用来解释「为什么这样配对」，<strong>不参与票价计算</strong>。
+          票价换算只用了三样东西：印度该航线的常态价、两地距离比、汇率与市场系数。
+        </p>
+      </details>
+    </section>
+
+    <!-- ③ 方法 -->
+    <section class="panel panel-method">
+      <details>
+        <summary>这条曲线是怎么算出来的？有哪些不能说的？</summary>
+
+        <div class="method-body">
+          <h3>一、数据是什么</h3>
+          <p>
+            Kaggle 公开数据集 <em>Flight Price Prediction</em>（Ease My Trip 抓取），
+            30 万条印度国内航线报价，覆盖 6 座城市、30 条航线、经济舱与商务舱两种舱位，
+            每条记录包含航司、航班号、经停次数、舱位、距起飞天数和价格。
+          </p>
+
+          <h3>二、形状怎么提取</h3>
+          <p>对每条航线，把每个提前天数的中位价，除以该航线「21 天以后」的中位价，得到无量纲的相对价：</p>
+          <pre>z(d) = 价格(d) ÷ 常态价</pre>
+          <p>再把 60 条航线×舱位的 z(d) 按天取中位数，得到一条汇总曲线。这条曲线只描述「形状」，不含任何绝对价格。</p>
+
+          <h3>三、城市怎么对标</h3>
+          <p>
+            6 座印度城市按「城市角色」对应到 6 座中国城市（首都对首都、金融中心对金融中心……）。
+            一条中国航线的常态价，取它对标的那条印度航线的常态价，再乘上市场系数和一个很弱的距离修正：
+          </p>
+          <pre>常态价(CNY) = 2.4 × 0.085 × 印度常态价 × (中国距离 ÷ 印度距离)^0.06</pre>
+          <p>
+            三个常数都有出处：<b>0.085</b> 是卢比兑人民币，<b>0.06</b> 是用这 30 条印度航线拟合出的距离弹性，
+            <b>2.4</b> 是人工校准的中国市场系数。
+          </p>
+          <p>
+            有意思的是，这个距离弹性几乎是零（R² 只有 0.06）——
+            说明<b>在这份数据里，票价主要由城市对决定，和公里数关系很弱</b>。
+            所以这个模型对长短航线的区分能力有限，给的是量级，不是报价。
+          </p>
+          <p>
+            你可以直接改写常态价，或用导入的实测数据校准；也可以把
+            <code>assets/cities.js</code> 里的 <code>level</code> 改成你认为更合适的值。
+          </p>
+
+          <h3>四、曲线怎么用</h3>
+          <pre>推算价(d) = 常态价 × [1 + α × (z(d) − 1)]</pre>
+          <p>
+            α 是临期涨价强度，默认 1.0。导入采集记录后，用最小二乘拟合 α，并报告平均绝对百分比误差。
+          </p>
+
+          <h3>五、必须说清楚的局限</h3>
+          <ul>
+            <li><strong>这不是中国数据。</strong>印度市场的竞争格局、税费、消费水平都不同，绝对价格不能照搬，只能借用形状。</li>
+            <li><strong>幅度不一定对。</strong>中国有春运、有高铁分流，临期溢价的强弱可能明显不同，这正是 α 存在的原因。</li>
+            <li><strong>原始数据没有出发日期。</strong>所以它做不了「2027 年寒假」这种季节分析，只能做「提前多少天」。</li>
+            <li><strong>数据只覆盖 49 天。</strong>更早的区间按平台价处理，不是观测值。</li>
+            <li><strong>推算值不能当作历史成交价引用。</strong>产品里所有推算结果都带「推算」标记。</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <footer class="page-foot">
+      <p>数据来源：Kaggle · Flight Price Prediction（Ease My Trip，印度国内，约 2022 年）。仅用于学习与演示。</p>
+      <p>本项目不做自动抓取。中国航线的绝对价格需要你自己输入或采集，推算结果不构成购票承诺。</p>
+    </footer>
+
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="assets/curve-data.js"></script>
+  <script src="assets/cities.js"></script>
+  <script src="assets/csv.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
